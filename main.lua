@@ -1,276 +1,324 @@
 --[[
-    Chat Spy with Rayfield UI
-    Modern GUI interface for monitoring player chats
+	Enhanced Chat Spy for Rayfield UI
+	Type "/spy" to enable or disable the chat spy
+	Fixed and optimized version with better reliability
 --]]
 
--- Rayfield UIライブラリの読み込み
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- 設定
+local Window = Rayfield:CreateWindow({
+   Name = "Chat Spy v2.0",
+   LoadingTitle = "Chat Spy System",
+   LoadingSubtitle = "by Enhanced Version",
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = "ChatSpy",
+      FileName = "Config"
+   },
+   Discord = {
+      Enabled = false,
+      Invite = "noinvitelink",
+      RememberJoins = true
+   },
+   KeySystem = false,
+})
+
+local Tab = Window:CreateTab("Spy Settings", 4483362458)
+
+local Section = Tab:CreateSection("Main Configuration")
+
+local EnabledToggle = Tab:CreateToggle({
+   Name = "Enable Chat Spy",
+   CurrentValue = true,
+   Flag = "SpyEnabled",
+   Callback = function(Value)
+      Config.enabled = Value
+      updateStatusMessage()
+   end,
+})
+
+local SelfSpyToggle = Tab:CreateToggle({
+   Name = "Spy On Yourself",
+   CurrentValue = true,
+   Flag = "SpySelf",
+   Callback = function(Value)
+      Config.spyOnMyself = Value
+   end,
+})
+
+local PublicToggle = Tab:CreateToggle({
+   Name = "Public Mode",
+   CurrentValue = false,
+   Flag = "PublicMode",
+   Callback = function(Value)
+      Config.public = Value
+   end,
+})
+
+local ItalicsToggle = Tab:CreateToggle({
+   Name = "Public Italics",
+   CurrentValue = true,
+   Flag = "PublicItalics",
+   Callback = function(Value)
+      Config.publicItalics = Value
+   end,
+})
+
+local Section2 = Tab:CreateSection("Appearance")
+
+local ColorPicker = Tab:CreateColorPicker({
+   Name = "Spy Message Color",
+   Color = Color3.fromRGB(0, 255, 255),
+   Flag = "MessageColor",
+   Callback = function(Value)
+      PrivateProperties.Color = Value
+   end
+})
+
+local Dropdown = Tab:CreateDropdown({
+   Name = "Font Style",
+   Options = {"SourceSansBold", "SourceSans", "Code", "Highway", "SciFi"},
+   CurrentOption = "SourceSansBold",
+   Flag = "FontStyle",
+   Callback = function(Option)
+      PrivateProperties.Font = Enum.Font[Option]
+   end,
+})
+
+local Slider = Tab:CreateSlider({
+   Name = "Text Size",
+   Range = {12, 24},
+   Increment = 1,
+   Suffix = "px",
+   CurrentValue = 18,
+   Flag = "TextSize",
+   Callback = function(Value)
+      PrivateProperties.TextSize = Value
+   end,
+})
+
+local Section3 = Tab:CreateSection("Actions")
+
+local Button = Tab:CreateButton({
+   Name = "Refresh Spy System",
+   Callback = function()
+      restartSpySystem()
+   end,
+})
+
+local Button2 = Tab:CreateButton({
+   Name = "Test Spy Message",
+   Callback = function()
+      testSpyMessage()
+   end,
+})
+
+-- Configuration
 local Config = {
-    enabled = true,
-    spyOnMyself = true,
-    public = false,
-    publicItalics = true,
-    logToConsole = true
+   enabled = true,
+   spyOnMyself = true,
+   public = false,
+   publicItalics = true
 }
 
--- サービスの取得
+-- Message Properties
+local PrivateProperties = {
+   Color = Color3.fromRGB(0, 255, 255),
+   Font = Enum.Font.SourceSansBold,
+   TextSize = 18
+}
+
+-- Services
 local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
-local player = Players.LocalPlayer
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TextService = game:GetService("TextService")
 
--- チャットイベントの取得
+-- Variables
+local player = Players.LocalPlayer
 local saymsg = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents"):WaitForChild("SayMessageRequest")
 local getmsg = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents"):WaitForChild("OnMessageDoneFiltering")
-
--- ログプロパティ
-local PrivateProperties = {
-    Color = Color3.fromRGB(0, 255, 255),
-    Font = Enum.Font.SourceSansBold,
-    TextSize = 18
-}
-
--- インスタンス管理
 local instance = (_G.chatSpyInstance or 0) + 1
+local activeConnections = {}
+
+-- Initialize
 _G.chatSpyInstance = instance
 
--- チャットログ保存用
-local chatLogs = {}
-local maxLogs = 100
-
--- Rayfield ウィンドウの作成
-local Window = Rayfield:CreateWindow({
-    Name = "Chat Spy | v2.0",
-    LoadingTitle = "Chat Spy Loading...",
-    LoadingSubtitle = "by Rayfield UI",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "ChatSpyConfig",
-        FileName = "ChatSpySettings"
-    },
-    Discord = {
-        Enabled = false,
-        Invite = "noinvitelink",
-        RememberJoins = true
-    },
-    KeySystem = false
-})
-
--- メインタブ
-local MainTab = Window:CreateTab("🏠 Main", 4483362458)
-local SettingsTab = Window:CreateTab("⚙️ Settings", 4483362458)
-local LogsTab = Window:CreateTab("📝 Logs", 4483362458)
-
--- メインセクション
-local MainSection = MainTab:CreateSection("Chat Spy Controls")
-
--- スパイ有効/無効トグル
-local SpyToggle = MainTab:CreateToggle({
-    Name = "Enable Chat Spy",
-    CurrentValue = Config.enabled,
-    Flag = "SpyEnabled",
-    Callback = function(Value)
-        Config.enabled = Value
-        local status = Value and "ENABLED" or "DISABLED"
-        PrivateProperties.Text = "{SPY " .. status .. "}"
-        StarterGui:SetCore("ChatMakeSystemMessage", PrivateProperties)
-        
-        if Config.logToConsole then
-            print("[Chat Spy] " .. status)
-        end
-        
-        Rayfield:Notify({
-            Title = "Chat Spy",
-            Content = "Chat Spy " .. status,
-            Duration = 3,
-            Image = 4483362458
-        })
-    end
-})
-
--- ステータス表示
-local StatusLabel = MainTab:CreateLabel("Status: " .. (Config.enabled and "🟢 Active" or "🔴 Inactive"))
-
--- 設定セクション
-local ConfigSection = SettingsTab:CreateSection("Spy Settings")
-
--- 自分のチャットを監視
-SettingsTab:CreateToggle({
-    Name = "Spy On Myself",
-    CurrentValue = Config.spyOnMyself,
-    Flag = "SpyOnMyself",
-    Callback = function(Value)
-        Config.spyOnMyself = Value
-    end
-})
-
--- 公開モード
-SettingsTab:CreateToggle({
-    Name = "Public Mode",
-    CurrentValue = Config.public,
-    Flag = "PublicMode",
-    Callback = function(Value)
-        Config.public = Value
-    end
-})
-
--- イタリック体
-SettingsTab:CreateToggle({
-    Name = "Public Italics",
-    CurrentValue = Config.publicItalics,
-    Flag = "PublicItalics",
-    Callback = function(Value)
-        Config.publicItalics = Value
-    end
-})
-
--- コンソールログ
-SettingsTab:CreateToggle({
-    Name = "Log to Console",
-    CurrentValue = Config.logToConsole,
-    Flag = "LogToConsole",
-    Callback = function(Value)
-        Config.logToConsole = Value
-    end
-})
-
--- ログセクション
-local LogsSection = LogsTab:CreateSection("Recent Chat Logs")
-
-local LogsParagraph = LogsTab:CreateParagraph({
-    Title = "Chat Logs",
-    Content = "No messages logged yet..."
-})
-
--- ログクリアボタン
-LogsTab:CreateButton({
-    Name = "Clear Logs",
-    Callback = function()
-        chatLogs = {}
-        LogsParagraph:Set({Title = "Chat Logs", Content = "Logs cleared!"})
-        Rayfield:Notify({
-            Title = "Chat Spy",
-            Content = "Logs cleared successfully",
-            Duration = 2,
-            Image = 4483362458
-        })
-    end
-})
-
--- ログを更新する関数
-local function updateLogsDisplay()
-    if #chatLogs == 0 then
-        LogsParagraph:Set({Title = "Chat Logs", Content = "No messages logged yet..."})
-        return
-    end
-    
-    local logText = ""
-    local displayCount = math.min(#chatLogs, 20)
-    
-    for i = #chatLogs - displayCount + 1, #chatLogs do
-        if chatLogs[i] then
-            logText = logText .. chatLogs[i] .. "\n"
-        end
-    end
-    
-    LogsParagraph:Set({Title = "Chat Logs (" .. #chatLogs .. " total)", Content = logText})
+-- Functions
+local function updateStatusMessage()
+   local status = Config.enabled and "ENABLED" or "DISABLED"
+   PrivateProperties.Text = "{SPY "..status.."}"
+   pcall(function()
+      StarterGui:SetCore("ChatMakeSystemMessage", PrivateProperties)
+   end)
 end
 
--- チャット監視関数
+local function safeSetCore(message)
+   PrivateProperties.Text = message
+   pcall(function()
+      StarterGui:SetCore("ChatMakeSystemMessage", PrivateProperties)
+   end)
+end
+
+local function restartSpySystem()
+   -- Clean up existing connections
+   for _, conn in pairs(activeConnections) do
+      if conn then
+         conn:Disconnect()
+      end
+   end
+   activeConnections = {}
+   
+   -- Reinitialize
+   _G.chatSpyInstance = _G.chatSpyInstance + 1
+   instance = _G.chatSpyInstance
+   
+   -- Reconnect to all players
+   for _, p in ipairs(Players:GetPlayers()) do
+      if p ~= player then
+         local conn = p.Chatted:Connect(function(msg)
+            onChatted(p, msg)
+         end)
+         table.insert(activeConnections, conn)
+      end
+   end
+   
+   safeSetCore("{SPY SYSTEM RESTARTED}")
+end
+
+local function testSpyMessage()
+   safeSetCore("{SPY TEST} This is a test message from the spy system")
+end
+
+local function isMessageFiltered(speaker, message)
+   local filtered = false
+   local conn
+   
+   conn = getmsg.OnClientEvent:Connect(function(packet, channel)
+      if packet.SpeakerUserId == speaker.UserId and string.find(message, packet.Message, 1, true) then
+         if channel == "All" or (channel == "Team" and not Config.public and Players[packet.FromSpeaker].Team == player.Team) then
+            filtered = true
+         end
+      end
+   end)
+   
+   -- Wait for message to be processed
+   local startTime = tick()
+   while tick() - startTime < 2 and not filtered do
+      task.wait(0.1)
+   end
+   
+   if conn then
+      conn:Disconnect()
+   end
+   
+   return not filtered
+end
+
 local function onChatted(p, msg)
-    if _G.chatSpyInstance ~= instance then return end
-    
-    -- /spyコマンドの処理
-    if p == player and msg:lower():sub(1, 4) == "/spy" then
-        Config.enabled = not Config.enabled
-        SpyToggle:Set(Config.enabled)
-        StatusLabel:Set("Status: " .. (Config.enabled and "🟢 Active" or "🔴 Inactive"))
-        return
-    end
-    
-    -- スパイが無効、または自分のメッセージを除外
-    if not Config.enabled then return end
-    if not Config.spyOnMyself and p == player then return end
-    
-    -- メッセージのクリーンアップ
-    msg = msg:gsub("[\n\r]", ''):gsub("\t", ' '):gsub("[ ]+", ' ')
-    
-    local hidden = true
-    local conn = getmsg.OnClientEvent:Connect(function(packet, channel)
-        if packet.SpeakerUserId == p.UserId and 
-           packet.Message == msg:sub(#msg - #packet.Message + 1) and 
-           (channel == "All" or (channel == "Team" and not Config.public and 
-            Players[packet.FromSpeaker].Team == player.Team)) then
-            hidden = false
-        end
-    end)
-    
-    wait(1)
-    conn:Disconnect()
-    
-    if hidden and Config.enabled then
-        local timestamp = os.date("%H:%M:%S")
-        local logMessage = string.format("[%s] %s: %s", timestamp, p.Name, msg)
-        
-        -- ログに追加
-        table.insert(chatLogs, logMessage)
-        if #chatLogs > maxLogs then
-            table.remove(chatLogs, 1)
-        end
-        
-        -- UIを更新
-        updateLogsDisplay()
-        
-        -- コンソールにログ
-        if Config.logToConsole then
-            print("[Chat Spy] " .. logMessage)
-        end
-        
-        -- チャットに表示
-        if Config.public then
-            local prefix = Config.publicItalics and "/me " or ""
-            saymsg:FireServer(prefix .. "{SPY} [" .. p.Name .. "]: " .. msg, "All")
-        else
-            PrivateProperties.Text = "{SPY} [" .. p.Name .. "]: " .. msg
-            StarterGui:SetCore("ChatMakeSystemMessage", PrivateProperties)
-        end
-    end
+   -- Check if this instance is still active
+   if _G.chatSpyInstance ~= instance then return end
+   
+   -- Handle spy command
+   if p == player and msg:lower():sub(1,4) == "/spy" then
+      Config.enabled = not Config.enabled
+      EnabledToggle:Set(Config.enabled)
+      task.wait(0.3)
+      updateStatusMessage()
+      return
+   end
+   
+   -- Process spy functionality
+   if Config.enabled and (Config.spyOnMyself or p ~= player) then
+      -- Clean the message
+      local cleanMsg = msg:gsub("[\n\r]", ''):gsub("\t", ' '):gsub("%s+", ' '):gsub("^%s+", ""):gsub("%s+$", "")
+      
+      -- Skip empty messages
+      if cleanMsg == "" then return end
+      
+      -- Check if message is filtered (not shown in public chat)
+      if isMessageFiltered(p, cleanMsg) then
+         if Config.public then
+            local spyMsg = (Config.publicItalics and "/me " or '') .. "{SPY} [" .. p.Name .. "]: " .. cleanMsg
+            pcall(function()
+               saymsg:FireServer(spyMsg, "All")
+            end)
+         else
+            safeSetCore("{SPY} [" .. p.Name .. "]: " .. cleanMsg)
+         end
+      end
+   end
 end
 
--- 既存プレイヤーのチャットを監視
+-- Setup player connections
+local function setupPlayer(p)
+   if p == player then return end
+   
+   local conn = p.Chatted:Connect(function(msg)
+      onChatted(p, msg)
+   end)
+   table.insert(activeConnections, conn)
+end
+
+-- Initialize connections for existing players
 for _, p in ipairs(Players:GetPlayers()) do
-    p.Chatted:Connect(function(msg)
-        onChatted(p, msg)
-    end)
+   setupPlayer(p)
 end
 
--- 新規プレイヤーのチャットを監視
-Players.PlayerAdded:Connect(function(p)
-    p.Chatted:Connect(function(msg)
-        onChatted(p, msg)
-    end)
+-- Handle new players
+local playerAddedConn
+playerAddedConn = Players.PlayerAdded:Connect(function(p)
+   setupPlayer(p)
+end)
+table.insert(activeConnections, playerAddedConn)
+
+-- Handle player leaving
+local playerRemovingConn
+playerRemovingConn = Players.PlayerRemoving:Connect(function(p)
+   -- Clean up any connections related to this player
+   for i, conn in ipairs(activeConnections) do
+      if not conn.Connected then
+         table.remove(activeConnections, i)
+         break
+      end
+   end
+end)
+table.insert(activeConnections, playerRemovingConn)
+
+-- Adjust chat UI safely
+pcall(function()
+   local success, chatFrame = pcall(function()
+      return player.PlayerGui:WaitForChild("Chat", 10).Frame
+   end)
+   
+   if success and chatFrame then
+      chatFrame.ChatChannelParentFrame.Visible = true
+      chatFrame.ChatBarParentFrame.Position = chatFrame.ChatChannelParentFrame.Position + UDim2.new(UDim.new(), chatFrame.ChatChannelParentFrame.Size.Y)
+   end
 end)
 
--- 初期化メッセージ
-PrivateProperties.Text = "{SPY " .. (Config.enabled and "ENABLED" or "DISABLED") .. "}"
-StarterGui:SetCore("ChatMakeSystemMessage", PrivateProperties)
+-- Initial status message
+updateStatusMessage()
 
--- チャットフレームの調整
-local chatFrame = player.PlayerGui.Chat.Frame
-chatFrame.ChatChannelParentFrame.Visible = true
-chatFrame.ChatBarParentFrame.Position = chatFrame.ChatChannelParentFrame.Position + 
-    UDim2.new(UDim.new(), chatFrame.ChatChannelParentFrame.Size.Y)
+Rayfield:LoadConfiguration()
 
--- 起動通知
-Rayfield:Notify({
-    Title = "Chat Spy Loaded",
-    Content = "Chat Spy is now active!",
-    Duration = 5,
-    Image = 4483362458
-})
+-- Cleanup when script is destroyed
+local function cleanup()
+   for _, conn in pairs(activeConnections) do
+      if conn then
+         conn:Disconnect()
+      end
+   end
+   activeConnections = {}
+end
 
-print("-- Chat Spy with Rayfield UI Loaded --")
-print("Press RightShift to toggle UI")
-print("Type '/spy' in chat to toggle spy mode")
+-- Auto cleanup
+game:GetService("UserInputService").WindowFocused:Connect(function()
+   if _G.chatSpyInstance ~= instance then
+      cleanup()
+   end
+end)
+
+print("-- Enhanced Chat Spy Loaded --")
+print("Type \"/spy\" in chat or use the Rayfield UI to control the spy")
+print("Features: Color customization, font settings, public/private modes")
